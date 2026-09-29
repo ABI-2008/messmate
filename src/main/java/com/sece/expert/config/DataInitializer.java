@@ -23,23 +23,37 @@ public class DataInitializer implements CommandLineRunner {
     private final MealService mealService;
     private final FeedbackService feedbackService;
     private final MealOptOutService mealOptOutService;
+    private final AuthService authService;
 
     @Autowired
     public DataInitializer(ResidentService residentService,
                            MenuItemService menuItemService,
                            MealService mealService,
                            FeedbackService feedbackService,
-                           MealOptOutService mealOptOutService) {
+                           MealOptOutService mealOptOutService,
+                           AuthService authService) {
         this.residentService = residentService;
         this.menuItemService = menuItemService;
         this.mealService = mealService;
         this.feedbackService = feedbackService;
         this.mealOptOutService = mealOptOutService;
+        this.authService = authService;
     }
 
     @Override
     public void run(String... args) throws Exception {
         System.out.println(">>> Checking MessMate database initialization...");
+
+        // 0. Seed Default Users for Sign In
+        try {
+            authService.register(new com.sece.expert.dto.SignUpRequest(
+                "admin", "Mess Administrator", "admin@messmate.sece.ac.in", "admin123", "ADMIN"
+            ));
+            authService.register(new com.sece.expert.dto.SignUpRequest(
+                "student", "Rahul Sharma", "student@sece.ac.in", "student123", "STUDENT"
+            ));
+        } catch (Exception ignored) {
+        }
 
         // 1. Seed Residents if empty
         if (residentService.getTotalResidentsCount() == 0) {

@@ -16,7 +16,11 @@ import {
   RefreshCw,
   MessageSquare,
   Sun,
-  Moon
+  Moon,
+  LogIn,
+  LogOut,
+  UserCheck,
+  Shield
 } from 'lucide-react';
 const API_BASE = '/api';
 
@@ -37,6 +41,21 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Auth State
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('messmate_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('signin'); // 'signin' or 'signup'
+  const [signInForm, setSignInForm] = useState({ identifier: '', password: '' });
+  const [signUpForm, setSignUpForm] = useState({ username: '', fullName: '', email: '', password: '', role: 'STUDENT' });
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Modals
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -146,6 +165,79 @@ export default function App() {
   useEffect(() => {
     fetchData();
   }, [selectedDate]);
+
+  // Auth Handlers
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signInForm)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const userObj = {
+          id: data.id,
+          username: data.username,
+          fullName: data.fullName,
+          email: data.email,
+          role: data.role
+        };
+        setCurrentUser(userObj);
+        localStorage.setItem('messmate_user', JSON.stringify(userObj));
+        setShowAuthModal(false);
+        setSignInForm({ identifier: '', password: '' });
+        showMsg(`Welcome back, ${data.fullName || data.username}!`);
+      } else {
+        showMsg(data.message || 'Invalid username or password', 'error');
+      }
+    } catch (err) {
+      showMsg('Failed to connect to authentication server', 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signUpForm)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const userObj = {
+          id: data.id,
+          username: data.username,
+          fullName: data.fullName,
+          email: data.email,
+          role: data.role
+        };
+        setCurrentUser(userObj);
+        localStorage.setItem('messmate_user', JSON.stringify(userObj));
+        setShowAuthModal(false);
+        setSignUpForm({ username: '', fullName: '', email: '', password: '', role: 'STUDENT' });
+        showMsg(`Registration successful! Welcome, ${data.fullName || data.username}.`);
+      } else {
+        showMsg(data.message || 'Registration failed', 'error');
+      }
+    } catch (err) {
+      showMsg('Failed to connect to authentication server', 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('messmate_user');
+    showMsg('Signed out successfully.');
+  };
 
   // Handle Feedback Submission
   const handleSubmitFeedback = async (e) => {
@@ -357,6 +449,68 @@ export default function App() {
         </div>
 
         <div className="nav-actions">
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.45rem', 
+                  background: 'var(--bg-card)', 
+                  border: '1px solid var(--border-color)', 
+                  padding: '0.35rem 0.75rem', 
+                  borderRadius: 'var(--radius-sm)' 
+                }}
+              >
+                <div 
+                  style={{ 
+                    width: '26px', 
+                    height: '26px', 
+                    borderRadius: '50%', 
+                    background: 'linear-gradient(135deg, var(--accent-orange), var(--accent-amber))', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    color: '#fff', 
+                    fontSize: '0.75rem', 
+                    fontWeight: 700 
+                  }}
+                >
+                  {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : currentUser.username.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    {currentUser.fullName || currentUser.username}
+                  </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--accent-orange)', fontWeight: 600 }}>
+                    {currentUser.role}
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleSignOut} 
+                title="Sign Out"
+                style={{ padding: '0.55rem 0.8rem', fontSize: '0.8rem' }}
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          ) : (
+            <button 
+              className="btn btn-primary" 
+              onClick={() => {
+                setAuthMode('signin');
+                setShowAuthModal(true);
+              }}
+              style={{ padding: '0.55rem 1rem', fontSize: '0.85rem' }}
+            >
+              <LogIn size={15} />
+              <span>Sign In</span>
+            </button>
+          )}
+
           <button 
             className="btn btn-secondary" 
             onClick={toggleTheme} 
@@ -1105,6 +1259,243 @@ export default function App() {
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Register</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Sign In & Sign Up */}
+      {showAuthModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <div className="modal-header" style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div 
+                  style={{ 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: 'var(--radius-sm)', 
+                    background: 'linear-gradient(135deg, var(--accent-orange), var(--accent-amber))', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    color: '#fff' 
+                  }}
+                >
+                  <Shield size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '1.2rem', margin: 0 }}>
+                    {authMode === 'signin' ? 'Welcome to MessMate' : 'Create an Account'}
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {authMode === 'signin' ? 'Sign in to manage meals and reviews' : 'Register to get started'}
+                  </span>
+                </div>
+              </div>
+              <button className="close-btn" onClick={() => setShowAuthModal(false)}>✕</button>
+            </div>
+
+            {/* Auth Mode Toggle Tabs */}
+            <div 
+              style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '1fr 1fr', 
+                background: 'var(--bg-secondary)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: 'var(--radius-sm)', 
+                padding: '0.25rem', 
+                marginBottom: '1.25rem' 
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setAuthMode('signin')}
+                style={{
+                  padding: '0.5rem',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  background: authMode === 'signin' ? 'var(--accent-orange)' : 'transparent',
+                  color: authMode === 'signin' ? '#fff' : 'var(--text-muted)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('signup')}
+                style={{
+                  padding: '0.5rem',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  background: authMode === 'signup' ? 'var(--accent-orange)' : 'transparent',
+                  color: authMode === 'signup' ? '#fff' : 'var(--text-muted)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Sign Up
+              </button>
+            </div>
+
+            {/* SIGN IN FORM */}
+            {authMode === 'signin' ? (
+              <form onSubmit={handleSignIn}>
+                <div className="form-group">
+                  <label className="form-label">Username or Email</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. admin or student"
+                    value={signInForm.identifier}
+                    onChange={(e) => setSignInForm({ ...signInForm, identifier: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <input
+                    type="password"
+                    className="form-input"
+                    placeholder="Enter password"
+                    value={signInForm.password}
+                    onChange={(e) => setSignInForm({ ...signInForm, password: e.target.value })}
+                    required
+                  />
+                </div>
+
+                {/* Quick Demo Credentials Info */}
+                <div 
+                  style={{ 
+                    fontSize: '0.78rem', 
+                    color: 'var(--text-muted)', 
+                    background: 'var(--bg-secondary)', 
+                    padding: '0.6rem 0.8rem', 
+                    borderRadius: 'var(--radius-sm)', 
+                    border: '1px dashed var(--border-color)', 
+                    marginBottom: '1.25rem' 
+                  }}
+                >
+                  💡 <strong>Default Demo Accounts:</strong>
+                  <div style={{ marginTop: '0.2rem' }}>• <strong>admin</strong> / <code>admin123</code> (Admin)</div>
+                  <div>• <strong>student</strong> / <code>student123</code> (Student)</div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ width: '100%', padding: '0.75rem' }}
+                  disabled={authLoading}
+                >
+                  {authLoading ? 'Signing in...' : 'Sign In'}
+                </button>
+
+                <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
+                  Don't have an account?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => setAuthMode('signup')}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent-orange)', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Create one here
+                  </button>
+                </p>
+              </form>
+            ) : (
+              /* SIGN UP FORM */
+              <form onSubmit={handleSignUp}>
+                <div className="form-group">
+                  <label className="form-label">Full Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Rahul Sharma"
+                    value={signUpForm.fullName}
+                    onChange={(e) => setSignUpForm({ ...signUpForm, fullName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Username</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Choose a username"
+                    value={signUpForm.username}
+                    onChange={(e) => setSignUpForm({ ...signUpForm, username: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="e.g. name@sece.ac.in"
+                    value={signUpForm.email}
+                    onChange={(e) => setSignUpForm({ ...signUpForm, email: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Password (min 6 characters)</label>
+                  <input
+                    type="password"
+                    className="form-input"
+                    placeholder="Create a password"
+                    minLength={6}
+                    value={signUpForm.password}
+                    onChange={(e) => setSignUpForm({ ...signUpForm, password: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Role</label>
+                  <select
+                    className="form-select"
+                    value={signUpForm.role}
+                    onChange={(e) => setSignUpForm({ ...signUpForm, role: e.target.value })}
+                  >
+                    <option value="STUDENT">Student / Hostel Resident</option>
+                    <option value="WARDEN">Hostel Warden</option>
+                    <option value="MESS_COMMITTEE">Mess Committee Representative</option>
+                    <option value="ADMIN">Mess Administrator</option>
+                  </select>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ width: '100%', padding: '0.75rem', marginTop: '0.5rem' }}
+                  disabled={authLoading}
+                >
+                  {authLoading ? 'Creating account...' : 'Create Account'}
+                </button>
+
+                <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
+                  Already registered?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => setAuthMode('signin')}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent-orange)', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Sign in here
+                  </button>
+                </p>
+              </form>
+            )}
           </div>
         </div>
       )}
