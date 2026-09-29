@@ -16,7 +16,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/opt-outs")
-@CrossOrigin(origins = "*")
 public class MealOptOutController {
 
     private final MealOptOutService mealOptOutService;

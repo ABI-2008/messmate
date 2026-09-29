@@ -18,7 +18,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/feedbacks")
-@CrossOrigin(origins = "*")
 public class FeedbackController {
 
     private final FeedbackService feedbackService;

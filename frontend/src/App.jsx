@@ -14,10 +14,11 @@ import {
   TrendingDown,
   Filter,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  Sun,
+  Moon
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:8081/api';
+const API_BASE = '/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('menu'); // 'menu', 'feedback', 'low-rated', 'opt-out', 'residents', 'items'
@@ -32,6 +33,7 @@ export default function App() {
   const [stats, setStats] = useState(null);
   
   // Filters & Form States
+  const [theme, setTheme] = useState(() => localStorage.getItem('messmate_theme') || 'light');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -100,11 +102,17 @@ export default function App() {
         fetch(`${API_BASE}/opt-outs/headcount?date=${selectedDate}`)
       ]);
 
-      if (mealsRes.ok) setMeals(await mealsRes.json());
-      if (itemsRes.ok) setMenuItems(await itemsRes.json());
-      if (resRes.ok) setResidents(await resRes.json());
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (headRes.ok) setHeadcount(await headRes.json());
+      const meals = mealsRes.ok ? await mealsRes.json() : [];
+      const items = itemsRes.ok ? await itemsRes.json() : [];
+      const residents = resRes.ok ? await resRes.json() : [];
+      const statsData = statsRes.ok ? await statsRes.json() : null;
+      const headcountData = headRes.ok ? await headRes.json() : null;
+
+      if (meals) setMeals(meals);
+      if (items) setMenuItems(items);
+      if (residents) setResidents(residents);
+      if (statsData) setStats(statsData);
+      if (headcountData) setHeadcount(headcountData);
 
       // Fetch low-rated meals for current week
       const today = new Date();
@@ -113,7 +121,10 @@ export default function App() {
       const end = new Date(today);
       end.setDate(today.getDate() + 7);
       const lowRes = await fetch(`${API_BASE}/feedbacks/low-rated?startDate=${start.toISOString().split('T')[0]}&endDate=${end.toISOString().split('T')[0]}&threshold=3.0`);
-      if (lowRes.ok) setLowRatedMeals(await lowRes.json());
+      if (lowRes.ok) {
+        const lowData = await lowRes.json().catch(() => []);
+        setLowRatedMeals(lowData || []);
+      }
 
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -121,6 +132,15 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('messmate_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
   useEffect(() => {
@@ -235,6 +255,9 @@ export default function App() {
         setShowItemModal(false);
         setItemForm({ name: '', category: 'South Indian', vegetarian: true, description: '' });
         fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showMsg(errData.message || 'Failed to create menu item', 'error');
       }
     } catch (err) {
       showMsg('Error creating menu item', 'error');
@@ -245,19 +268,24 @@ export default function App() {
   const handleCreateResident = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...residentForm,
+        email: residentForm.email && residentForm.email.trim() !== '' ? residentForm.email.trim() : null
+      };
+
       const res = await fetch(`${API_BASE}/residents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(residentForm)
+        body: JSON.stringify(payload)
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showMsg(`Resident ${data.name} registered successfully!`);
+        showMsg(`Resident ${data.name || 'Resident'} registered successfully!`);
         setShowResidentModal(false);
         setResidentForm({ name: '', rollNumber: '', roomNumber: '', hostelBlock: 'Block A', email: '' });
         fetchData();
       } else {
-        showMsg(data.message || 'Failed to register resident', 'error');
+        showMsg(data.message || (data.errors ? Object.values(data.errors).join(', ') : 'Failed to register resident'), 'error');
       }
     } catch (err) {
       showMsg('Error registering resident', 'error');
@@ -328,9 +356,20 @@ export default function App() {
           </button>
         </div>
 
-        <button className="btn btn-secondary" onClick={fetchData} title="Refresh Data">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="nav-actions">
+          <button 
+            className="btn btn-secondary" 
+            onClick={toggleTheme} 
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            aria-label="Toggle Theme"
+          >
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          </button>
+
+          <button className="btn btn-secondary" onClick={fetchData} title="Refresh Data">
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </nav>
 
       <main className="main-content">
@@ -489,14 +528,26 @@ export default function App() {
 
             <form onSubmit={handleSubmitFeedback}>
               <div className="form-group">
-                <label className="form-label">Select Resident</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Select Resident</label>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                    onClick={() => setShowResidentModal(true)}
+                  >
+                    + Register Resident
+                  </button>
+                </div>
                 <select 
                   className="form-select" 
                   value={feedbackForm.residentId}
                   onChange={(e) => setFeedbackForm({ ...feedbackForm, residentId: e.target.value })}
                   required
                 >
-                  <option value="">-- Choose Resident --</option>
+                  <option value="">
+                    {residents.length === 0 ? '-- No residents found (Click "+ Register Resident" above) --' : '-- Choose Resident --'}
+                  </option>
                   {residents.map(r => (
                     <option key={r.id} value={r.id}>{r.name} ({r.rollNumber} - Room {r.roomNumber})</option>
                   ))}
@@ -504,14 +555,26 @@ export default function App() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Select Scheduled Meal</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Select Scheduled Meal</label>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                    onClick={() => setShowScheduleModal(true)}
+                  >
+                    + Schedule Meal
+                  </button>
+                </div>
                 <select 
                   className="form-select" 
                   value={feedbackForm.mealId}
                   onChange={(e) => setFeedbackForm({ ...feedbackForm, mealId: e.target.value })}
                   required
                 >
-                  <option value="">-- Choose Meal --</option>
+                  <option value="">
+                    {meals.length === 0 ? '-- No meals scheduled (Click "+ Schedule Meal" above) --' : '-- Choose Meal --'}
+                  </option>
                   {meals.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.date} - [{m.mealType}] {m.menuItem?.name}
@@ -851,14 +914,29 @@ export default function App() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Select Menu Item</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Select Menu Item</label>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                    onClick={() => {
+                      setShowScheduleModal(false);
+                      setShowItemModal(true);
+                    }}
+                  >
+                    + Add New Item
+                  </button>
+                </div>
                 <select 
                   className="form-select"
                   value={scheduleForm.menuItemId}
                   onChange={(e) => setScheduleForm({ ...scheduleForm, menuItemId: e.target.value })}
                   required
                 >
-                  <option value="">-- Select Item --</option>
+                  <option value="">
+                    {menuItems.length === 0 ? '-- No menu items found (Click "+ Add New Item" above) --' : '-- Select Item --'}
+                  </option>
                   {menuItems.map(item => (
                     <option key={item.id} value={item.id}>
                       {item.name} ({item.category} - {item.vegetarian ? 'Veg' : 'Non-Veg'})
